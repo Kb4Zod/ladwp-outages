@@ -96,6 +96,35 @@
     font-size: 0.75rem;
     font-weight: normal;
   }
+  .status-chip {
+    display: inline-block;
+    align-self: flex-start;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    font-weight: bold;
+    color: #fff;
+  }
+  .chip-red { background: #a00; }
+  .chip-blue { background: #06c; }
+  .chip-yellow { background: #a70; }
+  .chip-purple { background: #609; }
+  .chip-green { background: #2a2; }
+  .chip-grey { background: #666; }
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 8px 0;
+  }
+  .legend-chip {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: bold;
+    color: #fff;
+  }
 </style>
 </head>
 <body>
@@ -104,13 +133,14 @@
   <p class="banner">4 outages in Playa Del Rey — 3444 customers affected</p>
   
   <ul>
-<li class="outage"><span class="customers">103 customers</span><span class="status">REPORTED OUTAGE</span><span class="etr">ETR: 9/21/2026 7:30 PM PDT</span></li>
-<li class="outage"><span class="customers">679 customers</span><span class="status">ASSIGNED</span><span class="etr">ETR: 9/21/2026 6:30 PM PDT</span></li>
-<li class="outage"><span class="customers">525 customers</span><span class="status">ASSIGNED</span><span class="etr">ETR: 9/21/2026 6:30 PM PDT</span></li>
-<li class="outage"><span class="customers">2137 customers</span><span class="status">CREWS WORKING</span><span class="etr">ETR: 9/21/2026 8:30 PM PDT</span></li>
+<li class="outage"><span class="status-chip chip-red" title="An outage has been reported in your area">REPORTED OUTAGE</span><span class="customers">103 customers</span><span class="etr">ETR: 9/21/2026 7:30 PM PDT</span></li>
+<li class="outage"><span class="status-chip chip-blue" title="Repair crew has been assigned and is in queue to be dispatched">ASSIGNED</span><span class="customers">679 customers</span><span class="etr">ETR: 9/21/2026 6:30 PM PDT</span></li>
+<li class="outage"><span class="status-chip chip-blue" title="Repair crew has been assigned and is in queue to be dispatched">ASSIGNED</span><span class="customers">525 customers</span><span class="etr">ETR: 9/21/2026 6:30 PM PDT</span></li>
+<li class="outage"><span class="status-chip chip-purple" title="Repair crew is on-site working to restore power">CREWS WORKING</span><span class="customers">2137 customers</span><span class="etr">ETR: 9/21/2026 8:30 PM PDT</span></li>
 </ul>
-  <p class="last-check" data-last-check="2026-09-22T05:39:23.754993+00:00">
-    <span class="badge badge-green" data-freshness="green"></span>Last checked: 9/21/2026 10:39 PM PDT &middot; checked <span id="relative-time">0 seconds ago</span>
+  <div class="legend"><span class="legend-chip chip-red" title="An outage has been reported in your area">Reported outage</span><span class="legend-chip chip-blue" title="Repair crew has been assigned and is in queue to be dispatched">Assigned</span><span class="legend-chip chip-yellow" title="Repair crew is on the way">Crews en route</span><span class="legend-chip chip-purple" title="Repair crew is on-site working to restore power">Crews working</span><span class="legend-chip chip-green" title="Repair is complete">Repair complete</span></div>
+  <p class="last-check" data-last-check="2026-09-22T05:51:26.043229+00:00">
+    <span class="badge badge-green" data-freshness="green"></span>Last checked: 9/21/2026 10:51 PM PDT &middot; checked <span id="relative-time">0 seconds ago</span>
   </p>
   </div>
   <footer>
