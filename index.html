@@ -62,6 +62,40 @@
   footer a {
     margin-right: 12px;
   }
+  .badge {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+  .badge-green {
+    background: #2a2;
+    width: auto;
+    height: auto;
+    border-radius: 999px;
+  }
+  .badge-green:empty {
+    width: 10px;
+    height: 10px;
+  }
+  .badge-amber {
+    background: #d90;
+  }
+  .badge-red {
+    background: #c33;
+  }
+  .badge-grey {
+    background: #999;
+    width: auto;
+    height: auto;
+    border-radius: 999px;
+    padding: 0 6px;
+    color: #fff;
+    font-size: 0.75rem;
+    font-weight: normal;
+  }
 </style>
 </head>
 <body>
@@ -75,12 +109,42 @@
 <li class="outage"><span class="customers">525 customers</span><span class="status">ASSIGNED</span><span class="etr">ETR: 9/21/2026 6:30 PM PDT</span></li>
 <li class="outage"><span class="customers">2137 customers</span><span class="status">CREWS WORKING</span><span class="etr">ETR: 9/21/2026 8:30 PM PDT</span></li>
 </ul>
-  <p class="last-check">Last checked: 9/21/2026 10:33 PM PDT</p>
+  <p class="last-check" data-last-check="2026-09-22T05:39:23.754993+00:00">
+    <span class="badge badge-green" data-freshness="green"></span>Last checked: 9/21/2026 10:39 PM PDT &middot; checked <span id="relative-time">0 seconds ago</span>
+  </p>
   </div>
   <footer>
     <a href="https://github.com/Kb4Zod/ladwp-outages/actions/workflows/start.yml">Start</a>
     <a href="https://github.com/Kb4Zod/ladwp-outages/actions/workflows/stop.yml">Stop</a>
     <a href="https://www.ladwp.com/outages/power-outage-map">LADWP outage map</a>
   </footer>
+  <script>
+  (function () {
+    var el = document.querySelector('[data-last-check]');
+    var rel = document.getElementById('relative-time');
+    if (!el || !rel) return;
+    var iso = el.getAttribute('data-last-check');
+    if (!iso) return;
+    function render() {
+      var then = new Date(iso).getTime();
+      if (isNaN(then)) return;
+      var seconds = Math.max((Date.now() - then) / 1000, 0);
+      var text;
+      if (seconds < 60) {
+        var n = Math.floor(seconds);
+        text = n + (n === 1 ? ' second ago' : ' seconds ago');
+      } else if (seconds < 3600) {
+        var n = Math.floor(seconds / 60);
+        text = n + (n === 1 ? ' minute ago' : ' minutes ago');
+      } else {
+        var n = Math.floor(seconds / 3600);
+        text = n + (n === 1 ? ' hour ago' : ' hours ago');
+      }
+      rel.textContent = text;
+    }
+    render();
+    setInterval(render, 30000);
+  })();
+  </script>
 </body>
 </html>
