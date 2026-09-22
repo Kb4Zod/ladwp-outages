@@ -1,6 +1,7 @@
 import json
 import unittest
 from datetime import datetime, timezone
+from unittest.mock import MagicMock, patch
 
 import check
 
@@ -128,6 +129,21 @@ class RenderPageTests(unittest.TestCase):
 
 
 class FetchOutagesUnitTests(unittest.TestCase):
+    def test_arcgis_error_body_treated_as_failure(self):
+        error_body = json.dumps(
+            {"error": {"code": 400, "message": "Invalid field", "details": []}}
+        ).encode("utf-8")
+
+        mock_response = MagicMock()
+        mock_response.status = 200
+        mock_response.read.return_value = error_body
+        mock_response.__enter__.return_value = mock_response
+        mock_response.__exit__.return_value = False
+
+        with patch("check.urlopen", return_value=mock_response):
+            with self.assertRaises(RuntimeError):
+                check.fetch_outages()
+
     def test_epoch_ms_to_iso_none(self):
         self.assertIsNone(check._epoch_ms_to_iso(None))
 

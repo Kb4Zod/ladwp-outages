@@ -12,10 +12,10 @@ from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
 
 ARCGIS_URL = (
-    "https://services5.arcgis.com/8myV3wKTt69g4Fto/arcgis/rest/services/"
-    "PowerOutages/FeatureServer/0/query"
+    "https://services2.arcgis.com/v0bIBBLIiGigCimX/ArcGIS/rest/services/"
+    "PowerOutages_Data/FeatureServer/0/query"
 )
-USER_AGENT = "ladwp-outages-monitor/1.0 (personal outage checker; contact hughmobile@gmail.com)"
+USER_AGENT = "ladwp-outages-monitor/1.0 (+https://github.com/Kb4Zod/ladwp-outages)"
 FETCH_TIMEOUT = 20
 
 STATE_PATH = "state.json"
@@ -60,6 +60,8 @@ def fetch_outages(timeout=FETCH_TIMEOUT):
         body = response.read()
 
     data = json.loads(body)
+    if "error" in data:
+        raise RuntimeError(f"ArcGIS returned an error: {data['error']}")
     features = data["features"]
 
     outages = []
