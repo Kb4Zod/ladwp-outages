@@ -117,6 +117,17 @@ class RenderPageTests(unittest.TestCase):
 
         self.assertIn("ETR: unknown", html)
 
+    def test_etr_renders_in_la_local_time(self):
+        state = base_state()
+        etr_iso = check._etr_from_fields("09/21/2026 20:30", None)
+        state["outages"] = [
+            {"id": 1, "customers": 10, "status": "REPORTED", "etr": etr_iso, "etr_text": "09/21/2026 20:30"}
+        ]
+
+        html = check.render_page(state)
+
+        self.assertIn("8:30 PM PDT", html)
+
     def test_stale_warning_shown(self):
         state = base_state()
         state["stale"] = True
@@ -144,12 +155,23 @@ class FetchOutagesUnitTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 check.fetch_outages()
 
-    def test_epoch_ms_to_iso_none(self):
-        self.assertIsNone(check._epoch_ms_to_iso(None))
+    def test_etr_from_fields_none(self):
+        self.assertIsNone(check._etr_from_fields(None, None))
 
-    def test_epoch_ms_to_iso_converts(self):
-        iso = check._epoch_ms_to_iso(1758509400000)
-        self.assertTrue(iso.startswith("2025-09-21") or iso.startswith("2025-09-22"))
+    def test_etr_from_fields_prefers_char_over_epoch(self):
+        # epoch here would decode (as UTC) to a different wall-clock time;
+        # the char field must win.
+        iso = check._etr_from_fields("09/21/2026 20:30", 1758529800000)
+        dt = datetime.fromisoformat(iso)
+        self.assertEqual((dt.hour, dt.minute), (20, 30))
+
+    def test_etr_from_fields_falls_back_to_epoch_as_la_wall_clock(self):
+        # 2026-09-21T20:30:00 UTC epoch ms, reinterpreted as LA wall-clock.
+        epoch_ms = int(datetime(2026, 9, 21, 20, 30, tzinfo=timezone.utc).timestamp() * 1000)
+        iso = check._etr_from_fields(None, epoch_ms)
+        dt = datetime.fromisoformat(iso)
+        self.assertEqual((dt.hour, dt.minute), (20, 30))
+        self.assertEqual(dt.utcoffset(), check.LOS_ANGELES.utcoffset(datetime(2026, 9, 21, 20, 30)))
 
 
 if __name__ == "__main__":

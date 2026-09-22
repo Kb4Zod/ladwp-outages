@@ -32,10 +32,25 @@ DEFAULT_STATE = {
 }
 
 
-def _epoch_ms_to_iso(value):
-    if value is None:
-        return None
-    return datetime.fromtimestamp(value / 1000, tz=timezone.utc).isoformat()
+def _etr_from_fields(etr_text, epoch_ms):
+    """Derives the ETR as an America/Los_Angeles-aware ISO8601 string.
+
+    LADWP stores the epoch's wall-clock components as LA local time, not UTC
+    (e.g. epoch decodes to 20:30 UTC when the actual ETR is 20:30 LA time), so
+    the epoch can't be trusted as true UTC. ETR_DATETIME_CHAR is the reliable
+    LA wall-clock source and is preferred; the epoch (reinterpreted as LA wall
+    clock) is only a fallback for when the char field is missing or malformed.
+    """
+    if etr_text:
+        try:
+            naive = datetime.strptime(etr_text, "%m/%d/%Y %H:%M")
+            return naive.replace(tzinfo=LOS_ANGELES).isoformat()
+        except ValueError:
+            pass
+    if epoch_ms is not None:
+        naive = datetime.fromtimestamp(epoch_ms / 1000, tz=timezone.utc).replace(tzinfo=None)
+        return naive.replace(tzinfo=LOS_ANGELES).isoformat()
+    return None
 
 
 def fetch_outages(timeout=FETCH_TIMEOUT):
@@ -72,7 +87,7 @@ def fetch_outages(timeout=FETCH_TIMEOUT):
                 "id": attrs["OBJECTID"],
                 "customers": attrs["COUNT_IN_RANK"],
                 "status": attrs["FAC_JOB_STATUS_NAM"],
-                "etr": _epoch_ms_to_iso(attrs["ETR_DATETIME"]),
+                "etr": _etr_from_fields(attrs["ETR_DATETIME_CHAR"], attrs["ETR_DATETIME"]),
                 "etr_text": attrs["ETR_DATETIME_CHAR"],
             }
         )
