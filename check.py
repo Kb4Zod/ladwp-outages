@@ -22,6 +22,11 @@ ARCGIS_URL = (
 USER_AGENT = "ladwp-outages-monitor/1.0 (+https://github.com/Kb4Zod/ladwp-outages)"
 FETCH_TIMEOUT = 20
 
+REPO_URL = "https://github.com/Kb4Zod/ladwp-outages"
+START_WORKFLOW_URL = f"{REPO_URL}/actions/workflows/start.yml"
+STOP_WORKFLOW_URL = f"{REPO_URL}/actions/workflows/stop.yml"
+LADWP_MAP_URL = "https://www.ladwp.com/outages/power-outage-map"
+
 STATE_PATH = "state.json"
 PAGE_PATH = "index.html"
 
@@ -259,6 +264,15 @@ def render_page(state, now=None):
   .results.greyed {{
     opacity: 0.5;
   }}
+  footer {{
+    margin-top: 16px;
+    padding-top: 8px;
+    border-top: 1px solid #ccc;
+    font-size: 0.85rem;
+  }}
+  footer a {{
+    margin-right: 12px;
+  }}
 </style>
 </head>
 <body>
@@ -269,6 +283,11 @@ def render_page(state, now=None):
   {outage_list}
   <p class="last-check">Last checked: {last_check}</p>
   </div>
+  <footer>
+    <a href="{START_WORKFLOW_URL}">Start</a>
+    <a href="{STOP_WORKFLOW_URL}">Stop</a>
+    <a href="{LADWP_MAP_URL}">LADWP outage map</a>
+  </footer>
 </body>
 </html>
 """

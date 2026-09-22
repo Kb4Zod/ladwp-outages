@@ -1,0 +1,32 @@
+name: Check
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: monitor
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run checker
+        run: python3 check.py
+
+      - name: Commit and push if changed
+        run: |
+          if ! git diff --quiet -- state.json index.html; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add state.json index.html
+            git commit -m "Update outage check"
+            git push
+          fi
