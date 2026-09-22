@@ -1,5 +1,5 @@
 {
-  "monitor_until": "2026-09-29T20:03:55.782255+00:00",
+  "monitor_until": null,
   "last_check": "2026-09-22T20:03:55.782255+00:00",
   "last_success": "2026-09-22T20:03:55.782255+00:00",
   "stale": false,
