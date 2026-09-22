@@ -51,3 +51,7 @@ stale rather than a false "no outages".
 
 GitHub Pages is configured to deploy from the `main` branch, root folder
 (`/`). `.nojekyll` is present so Pages serves `index.html` as-is.
+
+## License
+
+MIT — see LICENSE.
