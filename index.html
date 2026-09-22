@@ -40,9 +40,24 @@
     flex-direction: column;
     gap: 4px;
   }
+  .monitoring {
+    color: #333;
+    font-weight: bold;
+  }
+  .not-monitoring {
+    color: #777;
+  }
+  .expired-note {
+    color: #a00;
+  }
+  .results.greyed {
+    opacity: 0.5;
+  }
 </style>
 </head>
 <body>
+  <p class="monitoring not-monitoring">Not monitoring — last check 9/21/2026 10:02 PM PDT</p>
+  <div class="results greyed">
   <p class="banner">4 outages in Playa Del Rey — 3444 customers affected</p>
   
   <ul>
@@ -52,5 +67,6 @@
 <li class="outage"><span class="customers">525 customers</span><span class="status">ASSIGNED</span><span class="etr">ETR: 9/21/2026 6:30 PM PDT</span></li>
 </ul>
   <p class="last-check">Last checked: 9/21/2026 10:02 PM PDT</p>
+  </div>
 </body>
 </html>

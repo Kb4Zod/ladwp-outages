@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 """Fetches LADWP outage data for Playa Del Rey, updates state.json, renders index.html.
 
-Every run checks (no monitoring-window logic yet). Exits 0 in all handled cases;
-a failed fetch is recorded as stale data, not raised as an error.
+A plain run only fetches while a monitoring window (`monitor_until`) is active;
+otherwise it re-renders the last known state without hitting the network.
+`--start N` opens a window N days out and checks immediately; `--stop` closes
+it without fetching. Exits 0 in all handled cases; a failed fetch is recorded
+as stale data, not raised as an error.
 """
+import argparse
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
@@ -117,22 +121,42 @@ def run_check(state, fetch_fn=fetch_outages, now=None):
     return state
 
 
-def _format_etr(etr_iso):
-    if not etr_iso:
-        return "unknown"
-    dt = datetime.fromisoformat(etr_iso).astimezone(LOS_ANGELES)
-    return dt.strftime("%-m/%-d/%Y %-I:%M %p %Z")
+def monitor_until_dt(state):
+    """Parses `monitor_until` into an aware datetime, or None if unset."""
+    value = state.get("monitor_until")
+    if not value:
+        return None
+    return datetime.fromisoformat(value)
 
 
-def _format_last_check(iso_value):
+def is_monitoring_active(state, now):
+    until = monitor_until_dt(state)
+    return until is not None and until > now
+
+
+def is_monitoring_expired(state, now):
+    until = monitor_until_dt(state)
+    return until is not None and until <= now
+
+
+def _format_dt(iso_value, default):
     if not iso_value:
-        return "never"
+        return default
     dt = datetime.fromisoformat(iso_value).astimezone(LOS_ANGELES)
     return dt.strftime("%-m/%-d/%Y %-I:%M %p %Z")
 
 
-def render_page(state):
+def _format_etr(etr_iso):
+    return _format_dt(etr_iso, "unknown")
+
+
+def _format_last_check(iso_value):
+    return _format_dt(iso_value, "never")
+
+
+def render_page(state, now=None):
     """Renders the mobile-first static HTML page for the given state."""
+    now = now or datetime.now(timezone.utc)
     outages = state.get("outages") or []
     count = len(outages)
     total_customers = sum(o.get("customers") or 0 for o in outages)
@@ -142,6 +166,20 @@ def render_page(state):
     else:
         plural = "outage" if count == 1 else "outages"
         banner = f"{count} {plural} in Playa Del Rey — {total_customers} customers affected"
+
+    active = is_monitoring_active(state, now)
+    expired = is_monitoring_expired(state, now)
+
+    if active:
+        until_str = _format_dt(state.get("monitor_until"), "unknown")
+        monitor_line = f'<p class="monitoring">Monitoring until {until_str}</p>'
+    else:
+        last_check_str = _format_last_check(state.get("last_check"))
+        monitor_line = f'<p class="monitoring not-monitoring">Not monitoring — last check {last_check_str}</p>'
+        if expired:
+            monitor_line += '<p class="expired-note">Monitoring window has expired</p>'
+
+    result_class = "results" if active else "results greyed"
 
     stale_warning = ""
     if state.get("stale"):
@@ -208,13 +246,29 @@ def render_page(state):
     flex-direction: column;
     gap: 4px;
   }}
+  .monitoring {{
+    color: #333;
+    font-weight: bold;
+  }}
+  .not-monitoring {{
+    color: #777;
+  }}
+  .expired-note {{
+    color: #a00;
+  }}
+  .results.greyed {{
+    opacity: 0.5;
+  }}
 </style>
 </head>
 <body>
+  {monitor_line}
+  <div class="{result_class}">
   <p class="banner">{banner}</p>
   {stale_warning}
   {outage_list}
   <p class="last-check">Last checked: {last_check}</p>
+  </div>
 </body>
 </html>
 """
@@ -228,16 +282,32 @@ def load_state(path=STATE_PATH):
         return dict(DEFAULT_STATE)
 
 
-def main():
+def parse_args(argv):
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--start", nargs="?", const=7, type=int, default=None)
+    parser.add_argument("--stop", action="store_true")
+    return parser.parse_args(argv)
+
+
+def main(argv=None):
+    args = parse_args(sys.argv[1:] if argv is None else argv)
+    now = datetime.now(timezone.utc)
     state = load_state()
-    state = run_check(state)
+
+    if args.start is not None:
+        state["monitor_until"] = (now + timedelta(days=args.start)).isoformat()
+        state = run_check(state, now=now)
+    elif args.stop:
+        state["monitor_until"] = None
+    elif is_monitoring_active(state, now):
+        state = run_check(state, now=now)
 
     with open(STATE_PATH, "w", encoding="utf-8") as f:
         json.dump(state, f, indent=2)
         f.write("\n")
 
     with open(PAGE_PATH, "w", encoding="utf-8") as f:
-        f.write(render_page(state))
+        f.write(render_page(state, now=now))
 
     return 0
 
