@@ -4,7 +4,7 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] Last-checked line renders `data-last-check="<ISO8601>"` and shows "Last checked: <absolute local time> · checked N minutes ago" (seconds under 1 min, hours over 60)
 - [ ] Relative text refreshes every 30 s client-side; page with JS disabled still shows the absolute time
