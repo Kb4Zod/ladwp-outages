@@ -38,7 +38,44 @@ DEFAULT_STATE = {
     "last_success": None,
     "stale": False,
     "outages": [],
+    "recently_restored": [],
 }
+
+RESTORED_RETENTION_HOURS = 24
+
+# (status prefix, css colour class, description) — matched case-insensitively,
+# in order, against the start of the LADWP status string.
+STATUS_RULES = [
+    ("REPORTED OUTAGE", "red", "An outage has been reported in your area"),
+    ("ASSIGNED", "blue", "Repair crew has been assigned and is in queue to be dispatched"),
+    ("CREWS EN ROUTE", "yellow", "Repair crew is on the way"),
+    ("CREWS WORKING", "purple", "Repair crew is on-site working to restore power"),
+]
+
+UNKNOWN_STATUS_TEXT = "Unknown status"
+RESTORED_STATUS_TEXT = "Repair complete"
+
+LEGEND_ITEMS = [
+    ("red", "Reported outage", "An outage has been reported in your area"),
+    ("blue", "Assigned", "Repair crew has been assigned and is in queue to be dispatched"),
+    ("yellow", "Crews en route", "Repair crew is on the way"),
+    ("purple", "Crews working", "Repair crew is on-site working to restore power"),
+    ("green", RESTORED_STATUS_TEXT, "Repair is complete"),
+]
+
+
+def _status_chip(status):
+    """Matches a raw LADWP status string to (css class, description, display text).
+
+    Matching is case-insensitive by prefix. Unmatched or missing statuses map
+    to the grey "Unknown status" chip.
+    """
+    if status:
+        upper = status.strip().upper()
+        for prefix, css_class, description in STATUS_RULES:
+            if upper.startswith(prefix):
+                return css_class, description, status
+    return "grey", UNKNOWN_STATUS_TEXT, UNKNOWN_STATUS_TEXT
 
 
 def _etr_from_fields(etr_text, epoch_ms):
@@ -103,11 +140,23 @@ def fetch_outages(timeout=FETCH_TIMEOUT):
     return outages
 
 
+def _prune_expired_restored(entries, now):
+    kept = []
+    for entry in entries:
+        restored_at = datetime.fromisoformat(entry["restored_at"])
+        age_hours = (now - restored_at).total_seconds() / 3600
+        if age_hours < RESTORED_RETENTION_HOURS:
+            kept.append(entry)
+    return kept
+
+
 def run_check(state, fetch_fn=fetch_outages, now=None):
     """Runs one check against `state`, returning the updated state.
 
     On success: outages are replaced, stale cleared, last_success and last_check
-    updated. On failure: outages and last_success are preserved, stale is set.
+    updated. Outages present in the previous check but absent from this one move
+    into `recently_restored` (pruned of entries older than 24h). On failure:
+    outages, last_success, and recently_restored are all preserved, stale is set.
     """
     now = now or datetime.now(timezone.utc)
     now_iso = now.isoformat()
@@ -118,6 +167,23 @@ def run_check(state, fetch_fn=fetch_outages, now=None):
         state["stale"] = True
         state["last_check"] = now_iso
         return state
+
+    previous_outages = state.get("outages") or []
+    new_ids = {o["id"] for o in outages}
+    newly_restored = [
+        {
+            "id": o["id"],
+            "customers": o.get("customers"),
+            "status": o.get("status"),
+            "restored_at": now_iso,
+        }
+        for o in previous_outages
+        if o["id"] not in new_ids
+    ]
+    recently_restored = state.get("recently_restored") or []
+    state["recently_restored"] = _prune_expired_restored(
+        recently_restored + newly_restored, now
+    )
 
     state["outages"] = outages
     state["stale"] = False
@@ -157,6 +223,13 @@ def _format_etr(etr_iso):
 
 def _format_last_check(iso_value):
     return _format_dt(iso_value, "never")
+
+
+def _format_time_only(iso_value):
+    if not iso_value:
+        return "unknown time"
+    dt = datetime.fromisoformat(iso_value).astimezone(LOS_ANGELES)
+    return dt.strftime("%-I:%M %p")
 
 
 def _relative_time(iso_value, now):
@@ -238,18 +311,38 @@ def render_page(state, now=None):
             f"{last_success}</p>"
         )
 
-    if outages:
-        rows = "\n".join(
+    active_rows = []
+    for o in outages:
+        css_class, description, text = _status_chip(o.get("status"))
+        active_rows.append(
             '<li class="outage">'
+            f'<span class="status-chip chip-{css_class}" title="{description}">{text}</span>'
             f'<span class="customers">{o.get("customers", "unknown")} customers</span>'
-            f'<span class="status">{o.get("status", "unknown")}</span>'
             f'<span class="etr">ETR: {_format_etr(o.get("etr"))}</span>'
             "</li>"
-            for o in outages
         )
-        outage_list = f"<ul>\n{rows}\n</ul>"
-    else:
-        outage_list = ""
+
+    restored = state.get("recently_restored") or []
+    restored = _prune_expired_restored(restored, now)
+    restored_rows = []
+    for entry in restored:
+        restored_time = _format_time_only(entry.get("restored_at"))
+        restored_rows.append(
+            '<li class="outage restored">'
+            f'<span class="status-chip chip-green" title="Repair is complete">{RESTORED_STATUS_TEXT}</span>'
+            f'<span class="customers">{entry.get("customers", "unknown")} customers</span>'
+            f'<span class="restored-at">restored {restored_time}</span>'
+            "</li>"
+        )
+
+    rows = "\n".join(active_rows + restored_rows)
+    outage_list = f"<ul>\n{rows}\n</ul>" if rows else ""
+
+    legend_chips = "".join(
+        f'<span class="legend-chip chip-{css_class}" title="{description}">{label}</span>'
+        for css_class, label, description in LEGEND_ITEMS
+    )
+    legend = f'<div class="legend">{legend_chips}</div>'
 
     last_check_iso = state.get("last_check") or ""
     last_check_abs = _format_last_check(state.get("last_check"))
@@ -359,6 +452,35 @@ def render_page(state, now=None):
     font-size: 0.75rem;
     font-weight: normal;
   }}
+  .status-chip {{
+    display: inline-block;
+    align-self: flex-start;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    font-weight: bold;
+    color: #fff;
+  }}
+  .chip-red {{ background: #a00; }}
+  .chip-blue {{ background: #06c; }}
+  .chip-yellow {{ background: #a70; }}
+  .chip-purple {{ background: #609; }}
+  .chip-green {{ background: #2a2; }}
+  .chip-grey {{ background: #666; }}
+  .legend {{
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 8px 0;
+  }}
+  .legend-chip {{
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: bold;
+    color: #fff;
+  }}
 </style>
 </head>
 <body>
@@ -367,6 +489,7 @@ def render_page(state, now=None):
   <p class="banner">{banner}</p>
   {stale_warning}
   {outage_list}
+  {legend}
   <p class="last-check" data-last-check="{last_check_iso}">
     {badge}Last checked: {last_check_abs} &middot; checked <span id="relative-time">{last_check_rel}</span>
   </p>

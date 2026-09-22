@@ -99,7 +99,7 @@ class RenderPageTests(unittest.TestCase):
         state = base_state()
         state["outages"] = [
             {"id": 1, "customers": 100, "status": "CREWS WORKING", "etr": None, "etr_text": None},
-            {"id": 2, "customers": 50, "status": "REPORTED", "etr": None, "etr_text": None},
+            {"id": 2, "customers": 50, "status": "REPORTED OUTAGE", "etr": None, "etr_text": None},
         ]
 
         html = check.render_page(state)
@@ -107,7 +107,7 @@ class RenderPageTests(unittest.TestCase):
         self.assertIn("2 outages in Playa Del Rey", html)
         self.assertIn("150 customers affected", html)
         self.assertIn("CREWS WORKING", html)
-        self.assertIn("REPORTED", html)
+        self.assertIn("REPORTED OUTAGE", html)
 
     def test_missing_etr_shows_unknown(self):
         state = base_state()
@@ -405,6 +405,242 @@ class RenderPageMonitoringTests(unittest.TestCase):
         html = check.render_page(state, now=fixed_now())
 
         self.assertIn("greyed", html)
+
+
+class StatusChipTests(unittest.TestCase):
+    def test_reported_outage_is_red(self):
+        css_class, _, text = check._status_chip("REPORTED OUTAGE")
+        self.assertEqual(css_class, "red")
+        self.assertEqual(text, "REPORTED OUTAGE")
+
+    def test_assigned_prefix_is_blue(self):
+        css_class, _, _ = check._status_chip("ASSIGNED - IN QUEUE FOR DISPATCH")
+        self.assertEqual(css_class, "blue")
+
+    def test_crews_en_route_is_yellow(self):
+        css_class, _, _ = check._status_chip("CREWS EN ROUTE")
+        self.assertEqual(css_class, "yellow")
+
+    def test_crews_working_is_purple(self):
+        css_class, _, _ = check._status_chip("CREWS WORKING")
+        self.assertEqual(css_class, "purple")
+
+    def test_matching_is_case_insensitive(self):
+        css_class, _, _ = check._status_chip("assigned - in queue")
+        self.assertEqual(css_class, "blue")
+
+    def test_unknown_status_is_grey(self):
+        css_class, _, text = check._status_chip("SOMETHING ELSE")
+        self.assertEqual(css_class, "grey")
+        self.assertEqual(text, "Unknown status")
+
+    def test_missing_status_is_grey(self):
+        css_class, _, text = check._status_chip(None)
+        self.assertEqual(css_class, "grey")
+        self.assertEqual(text, "Unknown status")
+
+    def test_render_page_shows_chip_class_for_each_status(self):
+        state = base_state()
+        state["outages"] = [
+            {"id": 1, "customers": 1, "status": "REPORTED OUTAGE", "etr": None, "etr_text": None},
+            {"id": 2, "customers": 1, "status": "ASSIGNED - IN QUEUE", "etr": None, "etr_text": None},
+            {"id": 3, "customers": 1, "status": "CREWS EN ROUTE", "etr": None, "etr_text": None},
+            {"id": 4, "customers": 1, "status": "CREWS WORKING", "etr": None, "etr_text": None},
+            {"id": 5, "customers": 1, "status": "GIBBERISH", "etr": None, "etr_text": None},
+        ]
+
+        html = check.render_page(state)
+
+        self.assertIn('chip-red', html)
+        self.assertIn('chip-blue', html)
+        self.assertIn('chip-yellow', html)
+        self.assertIn('chip-purple', html)
+        self.assertIn('chip-grey', html)
+        self.assertIn('Unknown status', html)
+
+    def test_legend_lists_five_chips_with_tooltips(self):
+        html = check.render_page(base_state())
+
+        self.assertIn('class="legend"', html)
+        self.assertIn('title="An outage has been reported in your area"', html)
+        self.assertIn('title="Repair crew has been assigned and is in queue to be dispatched"', html)
+        self.assertIn('title="Repair crew is on the way"', html)
+        self.assertIn('title="Repair crew is on-site working to restore power"', html)
+        self.assertIn('title="Repair is complete"', html)
+
+
+class RestoredOutageTests(unittest.TestCase):
+    def test_outage_missing_from_successful_check_is_restored(self):
+        previous = base_state()
+        previous["outages"] = [
+            {"id": 1, "customers": 42, "status": "CREWS WORKING", "etr": None, "etr_text": None}
+        ]
+
+        state = check.run_check(previous, fetch_fn=lambda: [], now=fixed_now())
+
+        self.assertEqual(state["outages"], [])
+        self.assertEqual(len(state["recently_restored"]), 1)
+        restored = state["recently_restored"][0]
+        self.assertEqual(restored["id"], 1)
+        self.assertEqual(restored["customers"], 42)
+        self.assertEqual(restored["status"], "CREWS WORKING")
+        self.assertEqual(restored["restored_at"], fixed_now().isoformat())
+
+    def test_outage_still_present_is_not_restored(self):
+        previous = base_state()
+        previous["outages"] = [
+            {"id": 1, "customers": 42, "status": "CREWS WORKING", "etr": None, "etr_text": None}
+        ]
+
+        state = check.run_check(
+            previous,
+            fetch_fn=lambda: [
+                {"id": 1, "customers": 42, "status": "CREWS WORKING", "etr": None, "etr_text": None}
+            ],
+            now=fixed_now(),
+        )
+
+        self.assertEqual(state["recently_restored"], [])
+
+    def test_stale_check_leaves_recently_restored_untouched(self):
+        previous = base_state()
+        previous["recently_restored"] = [
+            {"id": 1, "customers": 42, "status": "CREWS WORKING", "restored_at": fixed_now().isoformat()}
+        ]
+
+        def fetch():
+            raise RuntimeError("boom")
+
+        state = check.run_check(previous, fetch_fn=fetch, now=fixed_now())
+
+        self.assertTrue(state["stale"])
+        self.assertEqual(state["recently_restored"], previous["recently_restored"])
+
+    def test_restored_entry_expires_after_24_hours_in_run_check(self):
+        previous = base_state()
+        previous["recently_restored"] = [
+            {
+                "id": 1,
+                "customers": 42,
+                "status": "CREWS WORKING",
+                "restored_at": (fixed_now() - timedelta(hours=25)).isoformat(),
+            }
+        ]
+
+        state = check.run_check(previous, fetch_fn=lambda: [], now=fixed_now())
+
+        self.assertEqual(state["recently_restored"], [])
+
+    def test_restored_entry_kept_under_24_hours_in_run_check(self):
+        previous = base_state()
+        previous["recently_restored"] = [
+            {
+                "id": 1,
+                "customers": 42,
+                "status": "CREWS WORKING",
+                "restored_at": (fixed_now() - timedelta(hours=23)).isoformat(),
+            }
+        ]
+
+        state = check.run_check(previous, fetch_fn=lambda: [], now=fixed_now())
+
+        self.assertEqual(len(state["recently_restored"]), 1)
+
+    def test_render_page_shows_restored_row_as_repair_complete(self):
+        state = base_state()
+        state["recently_restored"] = [
+            {
+                "id": 1,
+                "customers": 42,
+                "status": "CREWS WORKING",
+                "restored_at": (fixed_now() - timedelta(hours=1)).isoformat(),
+            }
+        ]
+
+        html = check.render_page(state, now=fixed_now())
+
+        self.assertIn("Repair complete", html)
+        self.assertIn("chip-green", html)
+        self.assertIn("42 customers", html)
+        self.assertIn("restored ", html)
+
+    def test_render_page_hides_restored_row_after_24_hours(self):
+        state = base_state()
+        state["recently_restored"] = [
+            {
+                "id": 1,
+                "customers": 42,
+                "status": "CREWS WORKING",
+                "restored_at": (fixed_now() - timedelta(hours=25)).isoformat(),
+            }
+        ]
+
+        html = check.render_page(state, now=fixed_now())
+
+        self.assertNotIn('class="outage restored"', html)
+        self.assertNotIn("42 customers", html)
+
+    def test_banner_totals_exclude_restored_outages(self):
+        state = base_state()
+        state["outages"] = [
+            {"id": 2, "customers": 10, "status": "CREWS WORKING", "etr": None, "etr_text": None}
+        ]
+        state["recently_restored"] = [
+            {
+                "id": 1,
+                "customers": 999,
+                "status": "CREWS WORKING",
+                "restored_at": (fixed_now() - timedelta(hours=1)).isoformat(),
+            }
+        ]
+
+        html = check.render_page(state, now=fixed_now())
+
+        self.assertIn("1 outage in Playa Del Rey", html)
+        self.assertIn("10 customers affected", html)
+        self.assertNotIn("999 customers affected", html)
+
+    def test_banner_reads_no_outages_when_only_restored_remain(self):
+        state = base_state()
+        state["outages"] = []
+        state["recently_restored"] = [
+            {
+                "id": 1,
+                "customers": 999,
+                "status": "CREWS WORKING",
+                "restored_at": (fixed_now() - timedelta(hours=1)).isoformat(),
+            }
+        ]
+
+        html = check.render_page(state, now=fixed_now())
+
+        self.assertIn("No outages in Playa Del Rey", html)
+
+    def test_old_state_without_recently_restored_key_still_renders(self):
+        state = {
+            "monitor_until": None,
+            "last_check": None,
+            "last_success": None,
+            "stale": False,
+            "outages": [],
+        }
+
+        html = check.render_page(state, now=fixed_now())
+
+        self.assertIn("No outages in Playa Del Rey", html)
+
+    def test_old_state_without_recently_restored_key_still_runs_check(self):
+        state = {
+            "monitor_until": None,
+            "last_check": None,
+            "last_success": None,
+            "stale": False,
+            "outages": [{"id": 1, "customers": 5, "status": "REPORTED OUTAGE", "etr": None, "etr_text": None}],
+        }
+
+        result = check.run_check(state, fetch_fn=lambda: [], now=fixed_now())
+
+        self.assertEqual(len(result["recently_restored"]), 1)
 
 
 if __name__ == "__main__":
