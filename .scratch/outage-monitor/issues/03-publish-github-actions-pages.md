@@ -4,7 +4,7 @@
 
 **Blocked by:** 02
 
-**Status:** ready-for-agent
+**Status:** done (branch feat/publish)
 
 - [ ] Three workflow files as described; cron every 15 minutes; all three use only `python3` from the runner (no pip)
 - [ ] Workflows commit and push only when `state.json`/`index.html` changed; concurrency guard so overlapping runs don't race

@@ -4,7 +4,7 @@
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** done (branch feat/monitor-windows)
 
 - [ ] `--start N` (integer days, default 7) sets `monitor_until`, runs a check, writes state and page
 - [ ] `--stop` sets `monitor_until` to null, re-renders without fetching

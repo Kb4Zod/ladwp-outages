@@ -4,7 +4,7 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done (branch feat/checker)
 
 - [ ] Running the script with no arguments fetches live data and writes the state file and page; both are committed as repo files (page at repo root as `index.html`, state as `state.json`)
 - [ ] State file matches the spec schema (`monitor_until` present but unused, `last_check`, `last_success`, `stale`, `outages[]` with id/customers/status/etr/etr_text)
