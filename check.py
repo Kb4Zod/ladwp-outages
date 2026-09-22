@@ -159,6 +159,50 @@ def _format_last_check(iso_value):
     return _format_dt(iso_value, "never")
 
 
+def _relative_time(iso_value, now):
+    """Renders how long ago `iso_value` was, relative to `now`."""
+    if not iso_value:
+        return "never"
+    dt = datetime.fromisoformat(iso_value)
+    seconds = max((now - dt).total_seconds(), 0)
+
+    if seconds < 60:
+        n = int(seconds)
+        unit = "second" if n == 1 else "seconds"
+        return f"{n} {unit} ago"
+
+    minutes = seconds / 60
+    if minutes < 60:
+        n = int(minutes)
+        unit = "minute" if n == 1 else "minutes"
+        return f"{n} {unit} ago"
+
+    hours = minutes / 60
+    n = int(hours)
+    unit = "hour" if n == 1 else "hours"
+    return f"{n} {unit} ago"
+
+
+def _freshness_class(state, now):
+    """Determines the freshness badge colour class for `state`."""
+    if state.get("monitor_until") is None:
+        return "grey"
+    if state.get("stale"):
+        return "red"
+
+    last_check = state.get("last_check")
+    if not last_check:
+        return "red"
+
+    dt = datetime.fromisoformat(last_check)
+    age_minutes = (now - dt).total_seconds() / 60
+    if age_minutes < 20:
+        return "green"
+    if age_minutes <= 60:
+        return "amber"
+    return "red"
+
+
 def render_page(state, now=None):
     """Renders the mobile-first static HTML page for the given state."""
     now = now or datetime.now(timezone.utc)
@@ -207,7 +251,15 @@ def render_page(state, now=None):
     else:
         outage_list = ""
 
-    last_check = _format_last_check(state.get("last_check"))
+    last_check_iso = state.get("last_check") or ""
+    last_check_abs = _format_last_check(state.get("last_check"))
+    last_check_rel = _relative_time(state.get("last_check"), now)
+    freshness_class = _freshness_class(state, now)
+    badge_label = "not monitoring" if freshness_class == "grey" else ""
+    badge = (
+        f'<span class="badge badge-{freshness_class}" data-freshness="{freshness_class}">'
+        f"{badge_label}</span>"
+    )
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -273,6 +325,40 @@ def render_page(state, now=None):
   footer a {{
     margin-right: 12px;
   }}
+  .badge {{
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 6px;
+    vertical-align: middle;
+  }}
+  .badge-green {{
+    background: #2a2;
+    width: auto;
+    height: auto;
+    border-radius: 999px;
+  }}
+  .badge-green:empty {{
+    width: 10px;
+    height: 10px;
+  }}
+  .badge-amber {{
+    background: #d90;
+  }}
+  .badge-red {{
+    background: #c33;
+  }}
+  .badge-grey {{
+    background: #999;
+    width: auto;
+    height: auto;
+    border-radius: 999px;
+    padding: 0 6px;
+    color: #fff;
+    font-size: 0.75rem;
+    font-weight: normal;
+  }}
 </style>
 </head>
 <body>
@@ -281,13 +367,43 @@ def render_page(state, now=None):
   <p class="banner">{banner}</p>
   {stale_warning}
   {outage_list}
-  <p class="last-check">Last checked: {last_check}</p>
+  <p class="last-check" data-last-check="{last_check_iso}">
+    {badge}Last checked: {last_check_abs} &middot; checked <span id="relative-time">{last_check_rel}</span>
+  </p>
   </div>
   <footer>
     <a href="{START_WORKFLOW_URL}">Start</a>
     <a href="{STOP_WORKFLOW_URL}">Stop</a>
     <a href="{LADWP_MAP_URL}">LADWP outage map</a>
   </footer>
+  <script>
+  (function () {{
+    var el = document.querySelector('[data-last-check]');
+    var rel = document.getElementById('relative-time');
+    if (!el || !rel) return;
+    var iso = el.getAttribute('data-last-check');
+    if (!iso) return;
+    function render() {{
+      var then = new Date(iso).getTime();
+      if (isNaN(then)) return;
+      var seconds = Math.max((Date.now() - then) / 1000, 0);
+      var text;
+      if (seconds < 60) {{
+        var n = Math.floor(seconds);
+        text = n + (n === 1 ? ' second ago' : ' seconds ago');
+      }} else if (seconds < 3600) {{
+        var n = Math.floor(seconds / 60);
+        text = n + (n === 1 ? ' minute ago' : ' minutes ago');
+      }} else {{
+        var n = Math.floor(seconds / 3600);
+        text = n + (n === 1 ? ' hour ago' : ' hours ago');
+      }}
+      rel.textContent = text;
+    }}
+    render();
+    setInterval(render, 30000);
+  }})();
+  </script>
 </body>
 </html>
 """

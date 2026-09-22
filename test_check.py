@@ -139,6 +139,84 @@ class RenderPageTests(unittest.TestCase):
         self.assertIn("last successful check", html.lower())
 
 
+class FreshnessIndicatorTests(unittest.TestCase):
+    def test_last_check_data_attribute_and_relative_text_seconds(self):
+        state = base_state()
+        state["monitor_until"] = (fixed_now() + timedelta(days=1)).isoformat()
+        last_check = fixed_now() - timedelta(seconds=30)
+        state["last_check"] = last_check.isoformat()
+
+        html = check.render_page(state, now=fixed_now())
+
+        self.assertIn(f'data-last-check="{last_check.isoformat()}"', html)
+        self.assertIn(">30 seconds ago<", html)
+        self.assertIn("Last checked:", html)
+
+    def test_relative_text_minutes(self):
+        state = base_state()
+        state["monitor_until"] = (fixed_now() + timedelta(days=1)).isoformat()
+        state["last_check"] = (fixed_now() - timedelta(minutes=5)).isoformat()
+
+        html = check.render_page(state, now=fixed_now())
+
+        self.assertIn(">5 minutes ago<", html)
+
+    def test_relative_text_hours(self):
+        state = base_state()
+        state["monitor_until"] = (fixed_now() + timedelta(days=1)).isoformat()
+        state["last_check"] = (fixed_now() - timedelta(hours=2)).isoformat()
+
+        html = check.render_page(state, now=fixed_now())
+
+        self.assertIn(">2 hours ago<", html)
+
+    def test_badge_green_under_20_minutes(self):
+        state = base_state()
+        state["monitor_until"] = (fixed_now() + timedelta(days=1)).isoformat()
+        state["last_check"] = (fixed_now() - timedelta(minutes=5)).isoformat()
+
+        html = check.render_page(state, now=fixed_now())
+
+        self.assertIn('data-freshness="green"', html)
+
+    def test_badge_amber_between_20_and_60_minutes(self):
+        state = base_state()
+        state["monitor_until"] = (fixed_now() + timedelta(days=1)).isoformat()
+        state["last_check"] = (fixed_now() - timedelta(minutes=45)).isoformat()
+
+        html = check.render_page(state, now=fixed_now())
+
+        self.assertIn('data-freshness="amber"', html)
+
+    def test_badge_red_over_60_minutes(self):
+        state = base_state()
+        state["monitor_until"] = (fixed_now() + timedelta(days=1)).isoformat()
+        state["last_check"] = (fixed_now() - timedelta(minutes=90)).isoformat()
+
+        html = check.render_page(state, now=fixed_now())
+
+        self.assertIn('data-freshness="red"', html)
+
+    def test_badge_red_when_stale_even_if_recent(self):
+        state = base_state()
+        state["monitor_until"] = (fixed_now() + timedelta(days=1)).isoformat()
+        state["last_check"] = (fixed_now() - timedelta(minutes=1)).isoformat()
+        state["stale"] = True
+
+        html = check.render_page(state, now=fixed_now())
+
+        self.assertIn('data-freshness="red"', html)
+
+    def test_badge_grey_and_not_monitoring_when_monitor_until_null(self):
+        state = base_state()
+        state["last_check"] = (fixed_now() - timedelta(minutes=1)).isoformat()
+
+        html = check.render_page(state, now=fixed_now())
+
+        self.assertIn('data-freshness="grey"', html)
+        self.assertIn("not monitoring", html.lower())
+
+
 class FetchOutagesUnitTests(unittest.TestCase):
     def test_arcgis_error_body_treated_as_failure(self):
         error_body = json.dumps(
