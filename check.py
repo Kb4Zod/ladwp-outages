@@ -109,7 +109,10 @@ def fetch_outages(timeout=FETCH_TIMEOUT):
     query = urlencode(
         {
             "where": "CITY_NAM = 'PLAYA DEL REY'",
-            "outFields": "OBJECTID,COUNT_IN_RANK,FAC_JOB_STATUS_NAM,ETR_DATETIME,ETR_DATETIME_CHAR",
+            "outFields": (
+                "OBJECTID,COUNT_IN_RANK,FAC_JOB_STATUS_NAM,ETR_DATETIME,"
+                "ETR_DATETIME_CHAR,CENTROID_LAT,CENTROID_LNG"
+            ),
             "returnGeometry": "false",
             "f": "json",
         }
@@ -130,7 +133,8 @@ def fetch_outages(timeout=FETCH_TIMEOUT):
         attrs = feature["attributes"]
         outages.append(
             {
-                "id": attrs["OBJECTID"],
+                "id": _outage_id(attrs),
+                "objectid": attrs["OBJECTID"],
                 "customers": attrs["COUNT_IN_RANK"],
                 "status": attrs["FAC_JOB_STATUS_NAM"],
                 "etr": _etr_from_fields(attrs["ETR_DATETIME_CHAR"], attrs["ETR_DATETIME"]),
@@ -138,6 +142,21 @@ def fetch_outages(timeout=FETCH_TIMEOUT):
             }
         )
     return outages
+
+
+def _outage_id(attrs):
+    """Derives a stable outage id from the outage's centroid.
+
+    LADWP re-numbers OBJECTID on every refresh, so it can't identify an
+    outage across checks. The rounded centroid is stable for the life of an
+    outage and is used instead; OBJECTID is only a fallback when the
+    centroid is missing.
+    """
+    lat = attrs.get("CENTROID_LAT")
+    lng = attrs.get("CENTROID_LNG")
+    if lat is not None and lng is not None:
+        return f"{lat:.4f},{lng:.4f}"
+    return attrs["OBJECTID"]
 
 
 def _prune_expired_restored(entries, now):

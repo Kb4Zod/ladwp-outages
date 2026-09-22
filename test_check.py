@@ -233,6 +233,43 @@ class FetchOutagesUnitTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 check.fetch_outages()
 
+    def test_fetch_outages_ids_by_centroid_not_objectid(self):
+        body = json.dumps(
+            {
+                "features": [
+                    {
+                        "attributes": {
+                            "OBJECTID": 251108,
+                            "COUNT_IN_RANK": 5,
+                            "FAC_JOB_STATUS_NAM": "CREWS WORKING",
+                            "ETR_DATETIME": None,
+                            "ETR_DATETIME_CHAR": None,
+                            "CENTROID_LAT": 33.95881,
+                            "CENTROID_LNG": -118.44322,
+                        }
+                    }
+                ]
+            }
+        ).encode("utf-8")
+
+        mock_response = MagicMock()
+        mock_response.status = 200
+        mock_response.read.return_value = body
+        mock_response.__enter__.return_value = mock_response
+        mock_response.__exit__.return_value = False
+
+        with patch("check.urlopen", return_value=mock_response):
+            outages = check.fetch_outages()
+
+        self.assertEqual(outages[0]["id"], "33.9588,-118.4432")
+        self.assertEqual(outages[0]["objectid"], 251108)
+
+    def test_outage_id_falls_back_to_objectid_when_centroid_missing(self):
+        self.assertEqual(
+            check._outage_id({"OBJECTID": 42, "CENTROID_LAT": None, "CENTROID_LNG": None}),
+            42,
+        )
+
     def test_etr_from_fields_none(self):
         self.assertIsNone(check._etr_from_fields(None, None))
 
@@ -485,6 +522,33 @@ class RestoredOutageTests(unittest.TestCase):
         self.assertEqual(restored["customers"], 42)
         self.assertEqual(restored["status"], "CREWS WORKING")
         self.assertEqual(restored["restored_at"], fixed_now().isoformat())
+
+    def test_same_centroid_different_objectid_is_not_restored(self):
+        previous = base_state()
+        previous["outages"] = [
+            {"id": "33.9588,-118.4432", "objectid": 251089, "customers": 42, "status": "CREWS WORKING", "etr": None, "etr_text": None}
+        ]
+
+        state = check.run_check(
+            previous,
+            fetch_fn=lambda: [
+                {"id": "33.9588,-118.4432", "objectid": 251108, "customers": 42, "status": "CREWS WORKING", "etr": None, "etr_text": None}
+            ],
+            now=fixed_now(),
+        )
+
+        self.assertEqual(state["recently_restored"], [])
+
+    def test_missing_centroid_outage_falling_back_to_objectid_still_restores(self):
+        previous = base_state()
+        previous["outages"] = [
+            {"id": 42, "objectid": 42, "customers": 7, "status": "REPORTED OUTAGE", "etr": None, "etr_text": None}
+        ]
+
+        state = check.run_check(previous, fetch_fn=lambda: [], now=fixed_now())
+
+        self.assertEqual(len(state["recently_restored"]), 1)
+        self.assertEqual(state["recently_restored"][0]["id"], 42)
 
     def test_outage_still_present_is_not_restored(self):
         previous = base_state()
