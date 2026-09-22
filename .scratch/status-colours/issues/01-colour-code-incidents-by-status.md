@@ -14,7 +14,7 @@ An outage that was present at the previous successful check and is absent from t
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] Each active outage row shows a coloured chip with the status text and the description above; prefix matching handles `ASSIGNED - IN QUEUE FOR DISPATCH` etc.; unknown statuses render grey
 - [ ] Outages missing from a successful check move to `recently_restored` (id, customers, last status, `restored_at`), render as green "Repair complete" rows, and expire after 24 h
