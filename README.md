@@ -1,11 +1,18 @@
-# LADWP Playa Del Rey outage monitor
+# ladwp-outages
 
-A tiny public page that shows whether LADWP has any active power outages in
-Playa Del Rey right now: outage count, customers affected, status, and
-estimated restore time per outage. It runs entirely on GitHub — Actions
-checks LADWP's data every 15 minutes while a monitoring window is open, and
-Pages serves the rendered page — so it keeps working even when the house is
-offline.
+A tiny public page that shows whether LADWP has any active power outages in Playa Del Rey right now.
+
+- **Status:** done (archived)
+- **Stack:** Python 3 standard library, GitHub Actions + GitHub Pages
+- **Run it:** repo **Actions** tab → **Start** (or `python3 check.py --start 7` locally)
+- **Repo:** github.com/Kb4Zod/ladwp-outages (public)
+
+## Why it exists
+During storms I want outage count, customers affected, status, and
+estimated restore time per outage without babysitting LADWP's map. It runs
+entirely on GitHub — Actions checks LADWP's data every 15 minutes while a
+monitoring window is open, and Pages serves the rendered page — so it keeps
+working even when the house is offline.
 
 ## Start / stop monitoring
 
